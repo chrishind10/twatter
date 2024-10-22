@@ -7,7 +7,7 @@ use App\Constants;
 class Twitter
 {
 
-    public static function fetchTweet(string $user, string $id, string $cursor): ?array
+    public static function fetchTweet(string $id): ?array
     {
         $guestId = self::getGuestId();
         $guestToken = self::activateGuestToken();
