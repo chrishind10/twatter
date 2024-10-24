@@ -9,39 +9,72 @@ class Twitter
 
     public static function fetchTweet(string $id): ?array
     {
-        $guestId = self::getGuestId();
-        $guestToken = self::activateGuestToken();
-        $tweet = self::queryTweet($id, $guestId, $guestToken);
+        if (!$guestId = self::getGuestId()) return null;
+        if (!$guestToken = self::activateGuestToken()) return null;
+        if (!$tweet = self::queryTweet($id, $guestId, $guestToken)) return null;
 
         return self::tidyUpHairball($tweet);
     }
 
+    private static function formatMedia(array $media): array
+    {
+        return [
+            'type' => $media['type'],
+            'url' => $media['url'],
+            'media_url_https' => $media['media_url_https'],
+            'variants' => $media['video_info']['variants'] ?? []
+        ];
+    }
+
     private static function tidyUpHairball(array $data): array
     {
-        $coreLegacy = $data['data']['tweetResult']['result']['core']['user_results']['result']['legacy'];
-        $legacy = $data['data']['tweetResult']['result']['legacy'];
-        $media = $legacy['entities']['media'];
+        $post = $data['data']['tweetResult']['result'];
+        $postContext = $post['birdwatch_pivot']['subtitle'] ?? null;
+        $postUser = $post['core']['user_results']['result'];
+        $postMedia = $post['legacy']['entities']['media'] ?? [];
 
-        $formattedMedia = array_map(function ($media) {
-            return [
-                'type' => $media['type'],
-                'url' => $media['url'],
-                'media_url_https' => $media['media_url_https']
-            ];
-        }, $media);
+        $formattedPostMedia = array_map(function ($media) {
+            return self::formatMedia($media);
+        }, $postMedia);
+
+        $quotedPost = $data['data']['tweetResult']['result']['quoted_status_result']['result'] ?? null;
+        $quotedPostContext = $quotedPost['birdwatch_pivot']['subtitle'] ?? null;
+        $quotedPostUser = $quotedPost['core']['user_results']['result'] ?? null;
+        $quotedPostMedia = $quotedPost['legacy']['entities']['media'] ?? [];
+
+        $formattedQuotedPostMedia = array_map(function ($media) {
+            return self::formatMedia($media);
+        }, $quotedPostMedia);
 
         return [
-            'user' => [
-                'screen_name' => $coreLegacy['screen_name'],
-                'name' => $coreLegacy['name'],
-                'profile_image' => $coreLegacy['profile_image_url_https'],
-                'profile_banner' => $coreLegacy['profile_banner_url'],
-                'verified' => $coreLegacy['verified']
-            ],
             'post' => [
-                'full_text' => $legacy['full_text'],
-                'media' => $formattedMedia
+                'user' => [
+                    'screen_name' => $postUser['legacy']['screen_name'],
+                    'name' => $postUser['legacy']['name'],
+                    'profile_image' => $postUser['legacy']['profile_image_url_https'],
+                    'profile_banner' => $postUser['legacy']['profile_banner_url'],
+                    'verified' => $postUser['legacy']['verified']
+                ],
+                'full_text' => $post['legacy']['full_text'],
+                'media' => $formattedPostMedia,
+                'context' => $postContext ? [
+                    'text' => $postContext['text']
+                ] : null
             ],
+            'quoted_post' => $quotedPost ? [
+                'user' => [
+                    'screen_name' => $quotedPostUser['legacy']['screen_name'],
+                    'name' => $quotedPostUser['legacy']['name'],
+                    'profile_image' => $quotedPostUser['legacy']['profile_image_url_https'],
+                    'profile_banner' => $quotedPostUser['legacy']['profile_banner_url'],
+                    'verified' => $quotedPostUser['legacy']['verified']
+                ],
+                'full_text' => $quotedPost['legacy']['full_text'],
+                'media' => $formattedQuotedPostMedia,
+                'context' => $quotedPostContext ? [
+                    'text' => $quotedPostContext['text']
+                ] : null
+            ] : null,
         ];
     }
 
